@@ -20,7 +20,7 @@ def coords_grid(b, h, w, homogeneous=False, device=None):
 
     return grid
 
-
+# wraping操作：根据输入的特征图、相机内参、相机位姿和深度图，将特征图从一个视图warp到另一个视图。
 def warp_with_pose_depth_candidates(
     feature1,
     intrinsics,

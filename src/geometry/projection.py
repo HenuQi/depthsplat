@@ -6,7 +6,9 @@ from jaxtyping import Bool, Float, Int64
 from torch import Tensor
 
 
-def homogenize_points(
+def homogenize_points( 
+    # homogenize_points()的功能：将批量的点（xyz）转换为齐次坐标（xyz1）。
+    # 在计算机视觉和图形学中，齐次坐标是一种表示方法，可以方便地进行仿射变换和投影变换。
     points: Float[Tensor, "*batch dim"],
 ) -> Float[Tensor, "*batch dim+1"]:
     """Convert batched points (xyz) to (xyz1)."""
@@ -87,7 +89,7 @@ def unproject(
     # Apply the supplied depth values.
     return ray_directions * z[..., None]
 
-
+# 从坐标，内外参中获得射线方向
 def get_world_rays(
     coordinates: Float[Tensor, "*#batch dim"],
     extrinsics: Float[Tensor, "*#batch dim+2 dim+2"],
@@ -113,7 +115,13 @@ def get_world_rays(
 
     return origins, directions
 
-
+# sample_image_grid()的功能：采样图像网格。把网络预测的 2D 像素级 Gaussian 参数，转换成真正用于 3D 构建的射线位置（ray position）。
+# 即：将 像素 → 射线 (ray)，构造 pixel grid，生成 每个像素对应的3D投影位置
+# 输入：图像形状
+# 输出：
+#   归一化坐标coordinates:(H,W,2)。其中2是(x,y)坐标。坐标是归一化的（范围从0到1）。
+#   索引坐标stacked_indices:(H,W,2)。其中2是(row, col)坐标。坐标是像素级的（ij索引）。
+# 在2D情况下，坐标是(x, y)格式，整数索引是(row, col)格式。
 def sample_image_grid(
     shape: tuple[int, ...],
     device: torch.device = torch.device("cpu"),
@@ -126,13 +134,16 @@ def sample_image_grid(
     # Each entry is a pixel-wise integer coordinate. In the 2D case, each entry is a
     # (row, col) coordinate.
     indices = [torch.arange(length, device=device) for length in shape]
-    stacked_indices = torch.stack(torch.meshgrid(*indices, indexing="ij"), dim=-1)
+    stacked_indices = torch.stack(torch.meshgrid(*indices, indexing="ij"), dim=-1) # meshgrid():生成 像素网格
+    # [[[0,0],[0,1],[0,2],[0,3]],
+    #  [[1,0],[1,1],[1,2],[1,3]],
+    #  [[2,0],[2,1],[2,2],[2,3]]]
 
     # Each entry is a floating-point coordinate in the range (0, 1). In the 2D case,
     # each entry is an (x, y) coordinate.
-    coordinates = [(idx + 0.5) / length for idx, length in zip(indices, shape)]
-    coordinates = reversed(coordinates)
-    coordinates = torch.stack(torch.meshgrid(*coordinates, indexing="xy"), dim=-1)
+    coordinates = [(idx + 0.5) / length for idx, length in zip(indices, shape)]  # 得到像素中心的归一化坐标,此时是(y,x)格式
+    coordinates = reversed(coordinates)  # 反转。(y,x)格式 -> (x,y)格式
+    coordinates = torch.stack(torch.meshgrid(*coordinates, indexing="xy"), dim=-1) # 再次生成像素网格，堆叠
 
     return coordinates, stacked_indices
 

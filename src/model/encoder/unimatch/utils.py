@@ -161,7 +161,9 @@ def feature_add_position(feature0, feature1, attn_splits, feature_channels):
 
     return feature0, feature1
 
-
+# 添加位置编码函数
+# 输入：特征图features:(B*V,C=128,H/8,W/8)
+# 输出：加上了位置编码的特征图features:(B*V,C=128,H/8,W/8)
 def mv_feature_add_position(features, attn_splits, feature_channels):
     pos_enc = PositionEmbeddingSine(num_pos_feats=feature_channels // 2)
 

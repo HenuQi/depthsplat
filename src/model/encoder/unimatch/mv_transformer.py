@@ -584,7 +584,18 @@ class MultiViewFeatureTransformer(nn.Module):
                 self.layers[i].self_attn.norm1.bias.data.zero_()
                 self.layers[i].cross_attn_ffn.norm2.weight.data.zero_()
                 self.layers[i].cross_attn_ffn.norm2.bias.data.zero_()
-
+    # 输入：multi_view_features:[
+    #           featrue_view1: (B,C,H/8,W/8),  # 视图1的第一个分辨率的特征图，包含所有 batch 样本
+    #           featrue_view2: (B,C,H/8,W/8),  # 视图2的第一个分辨率的特征图，包含所有 batch 样本
+    #           ...
+    #       ]
+    # multi_view_features 的长度是 V，每个元素的 shape 是 (B,C=128,H/8,W/8)，这是 CNN backbone 提取的特征图，还未经过 Transformer 融合。
+    # 输出：features:[
+    #           featrue_view1: (B,C,H/8,W/8),  # 视图1的第一个分辨率的特征图，包含所有 batch 样本。经过了Transformer 融合
+    #           featrue_view2: (B,C,H/8,W/8),  # 视图2的第一个分辨率的特征图，包含所有 batch 样本。经过了Transformer 融合。
+    #           ...
+    #       ]
+    # features 的长度也是 V，每个元素的 shape 也是 (B,C=128,H/8,W/8)，这是经过 Transformer 融合后的特征图。
     def forward(
         self,
         multi_view_features,
@@ -649,8 +660,20 @@ class MultiViewFeatureTransformer(nn.Module):
 
         return features
 
-
-def batch_features_camera_parameters(
+# batch_features_camera_parameters 负责整理：
+# 选定一个视图作为参考帧 (Ref)，其余 V-1 个视图作为目标帧 (Tgt)
+# 输入: 
+#   list of (B,C=128,H/8,W/8)，长度为V
+#   list of (B,3,3)，长度为V
+#   list of (B,4,4)，长度为V
+# 输出：
+#  q: [BV, C, H, W]  # 参考帧的特征图，包含所有 batch 样本
+#  q_intrinsics: [BV, 3, 3]  # 参考帧的内参矩阵，包含所有 batch 样本
+#  q_extrinsics: [BV, 4, 4]  #
+#  kv: [BV, V-1, C, H, W]  # 目标帧的特征图，包含所有 batch 样本
+#  kv_intrinsics: [BV, V-1, 3, 3]
+#  kv_extrinsics: [BV, V-1, 4, 4]
+def batch_features_camera_parameters( # 
     features,
     intrinsics,
     extrinsics,

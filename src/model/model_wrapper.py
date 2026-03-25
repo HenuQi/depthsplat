@@ -49,7 +49,9 @@ from PIL import Image
 from ..misc.stablize_camera import render_stabilization_path
 from .ply_export import save_gaussian_ply
 
-
+# 一.设置三个配置类和一个协议类： 
+# 优化器配置类OptimizerCfg, 测试阶段配置类TestCfg, 训练阶段配置类TrainCfg，
+# 协议类TrajectoryFn，定义了一个可调用对象的接口，接受一个时间参数t，返回相机的外参和内参。
 @dataclass
 class OptimizerCfg:
     lr: float
@@ -106,7 +108,7 @@ class TrajectoryFn(Protocol):
     ]:
         pass
 
-
+# 二、定义模型包装类ModelWrapper
 class ModelWrapper(LightningModule):
     logger: Optional[WandbLogger]
     encoder: nn.Module
@@ -118,7 +120,7 @@ class ModelWrapper(LightningModule):
     train_cfg: TrainCfg
     step_tracker: StepTracker | None
     eval_data_cfg: Optional[DatasetCfg | None]
-
+# 1.定义初始化函数__init__
     def __init__(
         self,
         optimizer_cfg: OptimizerCfg,
@@ -153,23 +155,30 @@ class ModelWrapper(LightningModule):
             self.test_step_outputs = {}
             self.time_skip_steps_dict = {"encoder": 0, "decoder": 0}
 
+# 2.定义训练步骤函数training_step
     def training_step(self, batch, batch_idx):
         batch: BatchedExample = self.data_shim(batch)
         _, _, _, h, w = batch["target"]["image"].shape
-
+# 2.1 Encoder(encoder_depthsplat)：
         # Run the model.
         gaussians = self.encoder(
             batch["context"], self.global_step, False, scene_names=batch["scene"]
         )
+        # encoder输出：
+        #       Gaussians(means, covariances, harmonics, opacities)
+        #           高斯位置：means:     [B, V*HW*1*1, 3]
+        #           协方差：covariances: [B, V*HW*1*1, 3, 3]
+        #           球谐系数：harmonics: [B, V*HW*1*1, 3, 9]
+        #           不透明度：opacities: [B, V*HW*1, 1]
 
-        if isinstance(gaussians, dict):
-            pred_depths = gaussians["depths"]
-            gaussians = gaussians["gaussians"]
+        if isinstance(gaussians, dict): # 如果返回的是个字典，说明有多层 depth prediction，
+            pred_depths = gaussians["depths"]   # 取出深度图
+            gaussians = gaussians["gaussians"]  # 取出gaussians
 
-        supervise_intermediate_depth = False
+        supervise_intermediate_depth = False # 默认不监督中间 depth
 
-        if gaussians.means.size(0) != batch["target"]["extrinsics"].size(0):
-            supervise_intermediate_depth = True
+        if gaussians.means.size(0) != batch["target"]["extrinsics"].size(0): # 不等：说明 encoder 产生了多组 depth 预测
+            supervise_intermediate_depth = True # 开启中间深度监督，要对中间每一层 depth 加 loss
             assert gaussians.means.size(0) % batch["target"]["extrinsics"].size(0) == 0
             num_depths = gaussians.means.size(0) // batch["target"]["extrinsics"].size(
                 0
@@ -183,7 +192,10 @@ class ModelWrapper(LightningModule):
             )
             target_near = torch.cat([batch["target"]["near"]] * num_depths, dim=0)
             target_far = torch.cat([batch["target"]["far"]] * num_depths, dim=0)
-
+# 2.2 Decoder(decoder.py)：
+            # Decoder 输出：DecoderOutput(color, depth)
+            #     color:(B,V,3,H,W)，渲染得到的颜色图。
+            #     depth:(B,V,H,W)，渲染得到的深度颜色（如果depth_mode不为None时才输出深度图）。
             output_all = self.decoder.forward(
                 gaussians,
                 target_extrinsics,
@@ -213,7 +225,10 @@ class ModelWrapper(LightningModule):
                 ),
             )
 
-        else:
+        else: # 没有多层中间深度图的话，直接decoder
+            # Decoder 输出：DecoderOutput(color, depth)
+            #     color:(B,V,3,H,W)，渲染得到的颜色图。
+            #     depth:(B,V,H,W)，渲染得到的深度颜色（如果depth_mode不为None时才输出深度图）。
             output = self.decoder.forward(
                 gaussians,
                 batch["target"]["extrinsics"],
@@ -223,7 +238,8 @@ class ModelWrapper(LightningModule):
                 (h, w),
                 depth_mode=self.train_cfg.depth_mode,
             )
-
+            
+# 2.3 计算损失和指标：
         target_gt = batch["target"]["image"]
 
         # Compute metrics.

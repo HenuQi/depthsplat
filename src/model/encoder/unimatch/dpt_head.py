@@ -217,7 +217,10 @@ def _make_fusion_block(features, use_bn, size=None):
         size=size,
     )
 
-
+# DPTHead模块：负责将Transformer编码器输出的多尺度特征进行融合和上采样
+# 在大多是方法中，DPTHead 指的是 DPT 网络的最后一部分：
+#   负责把多尺度特征融合并上采样到输出分辨率的 prediction head
+# 它包含多个卷积层、转置卷积层和特征融合块，可以选择性地融合CNN特征、单目特征和多视角特征。
 class DPTHead(nn.Module):
     def __init__(
         self,
@@ -443,6 +446,14 @@ class DPTHead(nn.Module):
             nn.init.zeros_(self.scratch.output_conv[-1].weight)
             nn.init.zeros_(self.scratch.output_conv[-1].bias)
 
+# DPTHead模块的前向传播流程：
+# 输入：out_features：长度为 4 的特征列表，每个元素是 4D 张量。
+# 
+# 输出：默认为True   
+# return_feature=True 时输出特征图，shape 是 [ BV, C’, H, W]。
+# return_feature=False 时输出残差深度，shape 是 [ BV, 1, H, W]。
+#  
+# 
     def forward(
         self,
         out_features,

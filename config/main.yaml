@@ -9,7 +9,7 @@ wandb:
   project: depthsplat
   entity: placeholder
   name: placeholder
-  mode: online
+  mode: offline     # online
   id: null
 
 mode: train

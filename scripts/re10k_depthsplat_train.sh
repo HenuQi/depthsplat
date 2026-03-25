@@ -16,16 +16,30 @@ output_dir=checkpoints/re10k-256x256-depthsplat-small
 
 # or
 # 4x 4090 (24GB) for 300K steps, batch size 4 on each gpu
-# python -m src.main +experiment=re10k \
-# data_loader.train.batch_size=4 \
-# dataset.test_chunk_interval=10 \
-# trainer.max_steps=300000 \
-# model.encoder.upsample_factor=4 \
-# model.encoder.lowest_feature_resolution=4 \
-# checkpointing.pretrained_monodepth=pretrained/depth_anything_v2_vits.pth \
-# checkpointing.pretrained_mvdepth=pretrained/gmflow-scale1-things-e9887eda.pth \
-# output_dir=checkpoints/re10k-256x256-depthsplat-small
+python -m src.main +experiment=re10k \
+data_loader.train.batch_size=4 \
+dataset.test_chunk_interval=10 \
+trainer.max_steps=300000 \
+model.encoder.upsample_factor=4 \
+model.encoder.lowest_feature_resolution=4 \
+checkpointing.pretrained_monodepth=pretrained/depth_anything_v2_vits.pth \
+checkpointing.pretrained_mvdepth=pretrained/gmflow-scale1-things-e9887eda.pth \
+output_dir=checkpoints/re10k-256x256-depthsplat-small
 
+# 我的 or 
+# 4x A6000 (48GB) for 150K steps
+NCCL_DEBUG=INFO TORCH_DISTRIBUTED_DETAIL=DEBUG python -m src.main +experiment=re10k \
+data_loader.train.batch_size=8 \
+dataset.test_chunk_interval=10 \
+trainer.max_steps=150000 \
+model.encoder.upsample_factor=4 \
+model.encoder.lowest_feature_resolution=4 \
+checkpointing.pretrained_monodepth=pretrained/depth_anything_v2_vits.pth \
+checkpointing.pretrained_mvdepth=pretrained/gmflow-scale1-things-e9887eda.pth \
+output_dir=checkpoints/re10k-256x256-depthsplat-small \
+checkpointing.resume=true
+
+# checkpointing.resume=true # 断点恢复：在checkpoints目录下找到最新的checkpoint，继续训练
 
 # or
 # a single A100 (80GB) for 600K steps, batch size 8 on each gpu

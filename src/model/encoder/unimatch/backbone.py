@@ -1,6 +1,6 @@
 import torch.nn as nn
 
-
+# 1. 定义残差块ResidualBlock类，包含两个卷积层和一个可选的下采样层，用于构建CNNEncoder的基本单元。
 class ResidualBlock(nn.Module):
     def __init__(
         self,
@@ -53,15 +53,15 @@ class ResidualBlock(nn.Module):
 
         return self.relu(x + y)
 
-
+# 2. 定义CNNEncoder类，用于提取输入图像的多尺度特征，并根据配置返回不同分辨率的特征图。包含多个残差块和卷积层，
 class CNNEncoder(nn.Module):
     def __init__(
         self,
         output_dim=128,
         norm_layer=nn.InstanceNorm2d,
-        num_output_scales=1,
-        return_quarter=False,  # return 1/4 resolution feature
-        lowest_scale=8,  # lowest resolution, 1/8 or 1/4
+        num_output_scales=1,   # num_output_scales表示输出的特征图分辨率数量，默认为1，说明默认只输出1/8分辨率的特征图。如果设置为2，则输出1/4和1/8分辨率的特征图；如果设置为3，则输出1/2、1/4和1/8分辨率的特征图。
+        return_quarter=False,  # return 1/4 resolution feature。是否返回1/4分辨率的特征图
+        lowest_scale=8,  # lowest resolution, 1/8 or 1/4。
         return_all_scales=False,
         **kwargs,
     ):
@@ -84,13 +84,13 @@ class CNNEncoder(nn.Module):
             feature_dims[0], stride=1, norm_layer=norm_layer
         )  # 1/2
 
-        if self.lowest_scale == 4:
+        if self.lowest_scale == 4: # （默认=8）
             stride = 1
         else:
             stride = 2
         self.layer2 = self._make_layer(
             feature_dims[1], stride=stride, norm_layer=norm_layer
-        )  # 1/2 or 1/4
+        )  # 1/2 or 1/4（通常stride = 2，因此1/4）
 
         # lowest resolution 1/4 or 1/8
         self.layer3 = self._make_layer(
@@ -122,34 +122,42 @@ class CNNEncoder(nn.Module):
 
         self.in_planes = dim
         return nn.Sequential(*layers)
-
+# 3. 定义CNNEncoder的前向传播函数forward()：从输入图像中提取出不同分辨率的特征图，包括1/2、1/4和1/8分辨率的特征图，以及是否返回所有分辨率的特征图。
+    # 输入: x = images:(B, 3, H, W)
+    # 输出: output = features list:[ 
+    #                                   1/2 features,   # (B,C=128, H/2, W/2)
+    #                                   1/4 features,   # (B,C=128, H/4, W/4)
+    #                                   1/8 features    # (B,C=128, H/8, W/8)               
+    #                              ]    
+    # 
+    # 即：CNN 输出分辨率从高到低的特征图列表：features list:[1/2 features, 1/4 features, 1/8 features] 
     def forward(self, x):
-        output_all_scales = []
-        output = []
-        x = self.conv1(x)
-        x = self.norm1(x)
-        x = self.relu1(x)
+        output_all_scales = []   # 用于保存所有尺度的特征图
+        output = [] # 用于保存最终返回的特征图
+        x = self.conv1(x) # x:(B, 3, H, W) -> (B, 64, H/2, W/2)
+        x = self.norm1(x) # x:(B, 64, H/2, W/2) 不变
+        x = self.relu1(x) # x:(B, 64, H/2, W/2) 不变
 
-        x = self.layer1(x)  # 1/2
+        x = self.layer1(x)  # 1/2分辨率, x:(B, 64, H/2, W/2) 不变
 
-        if self.return_all_scales:
+        if self.return_all_scales: # （默认需要）如果配置要求返回所有尺度的特征图，就把当前尺度的特征图添加到output_all_scales列表中
             output_all_scales.append(x)
 
-        if self.num_scales >= 3:
+        if self.num_scales >= 3: # （默认为1）如果要求返回3个尺度的特征图,就存入output列表中
             output.append(x)
 
-        x = self.layer2(x)  # 1/2 or 1/4
-        if self.return_quarter:
+        x = self.layer2(x)  # 1/2 or 1/4（通常是1/4分辨率）, x:(B, 64, H/2, W/2) -> (B, 96, H/4, W/4)
+        if self.return_quarter: #（默认不需要）如果配置要求返回1/4分辨率的特征图，就把此时是1/4尺度的特征图添加到output列表中
             output.append(x)
 
-        if self.return_all_scales:
+        if self.return_all_scales:# （默认需要）
             output_all_scales.append(x)
 
         if self.num_scales >= 2:
             output.append(x)
 
-        x = self.layer3(x)  # 1/4 or 1/8
-        x = self.conv2(x)
+        x = self.layer3(x)  # 1/4 or 1/8（通常是1/8分辨率），x:(B, 96, H/4, W/4) -> (B, 128, H/8, W/8)
+        x = self.conv2(x)  # x:(B, 128, H/8, W/8) 不变
 
         if self.return_all_scales:
             output_all_scales.append(x)
@@ -161,9 +169,9 @@ class CNNEncoder(nn.Module):
             output.append(x)
             return output
 
-        if self.num_scales >= 1:
-            output.append(x)
-            return output
+        if self.num_scales >= 1: # 默认num_scales = 1
+            output.append(x)  # x:(B, 128, H/8, W/8)
+            return output  # 返回 output 列表，里面只有 1/8 分辨率的特征图
 
         out = [x]
 

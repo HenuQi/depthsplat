@@ -32,7 +32,7 @@ def get_data_shim(encoder: nn.Module) -> DataShim:
     return combined_shim
 
 
-@dataclass
+@dataclass # 简化数据类的定义过程,自动定义方法
 class DataLoaderStageCfg:
     batch_size: int
     num_workers: int

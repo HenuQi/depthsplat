@@ -47,7 +47,10 @@ def cyan(text: str) -> str:
     config_name="main",
 )
 def train(cfg_dict: DictConfig):
+# 1. 加载配置文件，设置全局配置对象
     if cfg_dict["mode"] == "train" and cfg_dict["train"]["eval_model_every_n_val"] > 0:
+        # 在训练阶段，构造一个专门用于验证（evaluation）的配置 eval_cfg，用于在训练过程中定期评估模型性能。
+        # 在 训练模式 且 设置了验证频率 时才会构造验证配置。
         eval_cfg_dict = copy.deepcopy(cfg_dict)
         dataset_dir = str(cfg_dict["dataset"]["roots"]).lower()
         if "re10k" in dataset_dir:
@@ -68,19 +71,20 @@ def train(cfg_dict: DictConfig):
     else:
         eval_cfg = None
 
-    cfg = load_typed_root_config(cfg_dict)
-    set_cfg(cfg_dict)
+    cfg = load_typed_root_config(cfg_dict)  # 把 DictConfig类型 转成 RootCfg 类型
+    set_cfg(cfg_dict)       # 设置全局配置对象global_cfg.cfg = cfg_dict，供其他模块访问。
 
+# 2. 设置输出目录，
     # Set up the output directory.
-    if cfg_dict.output_dir is None:
+    if cfg_dict.output_dir is None: # 如果没有指定输出目录，就用 Hydra 默认的输出目录
         output_dir = Path(
             hydra.core.hydra_config.HydraConfig.get()["runtime"]["output_dir"]
         )
-    else:  # for resuming
+    else:  # for resuming  如果指定了输出目录，就用指定的目录
         output_dir = Path(cfg_dict.output_dir)
         os.makedirs(output_dir, exist_ok=True)
     print(cyan(f"Saving outputs to {output_dir}."))
-
+# 3. 设置wandb日志记录器和（回调函数）
     # Set up logging with wandb.
     callbacks = []
     if cfg_dict.wandb.mode != "disabled" and cfg.mode == "train":
@@ -103,11 +107,12 @@ def train(cfg_dict: DictConfig):
 
         if wandb.run is not None:
             wandb.run.log_code("src")
-    else:
+    else: # 如果不启用W&B，使用本地日志记录器LocalLogger 进行日志记录
         logger = LocalLogger()
 
+# 4. 设置模型检查点（回调函数）
     # Set up checkpointing.
-    callbacks.append(
+    callbacks.append( # 添加模型检查点回调 ModelCheckpoint，保存训练过程中的模型权重和状态
         ModelCheckpoint(
             output_dir / "checkpoints",
             every_n_train_steps=cfg.checkpointing.every_n_train_steps,
@@ -120,18 +125,19 @@ def train(cfg_dict: DictConfig):
         cb.CHECKPOINT_EQUALS_CHAR = '_'
 
     # Prepare the checkpoint for loading.
-    if cfg.checkpointing.resume:
+    if cfg.checkpointing.resume: # resume 继续训练，就从本地加载
         if not os.path.exists(output_dir / 'checkpoints'):
             checkpoint_path = None
         else:
             checkpoint_path = find_latest_ckpt(output_dir / 'checkpoints')
             print(f'resume from {checkpoint_path}')
-    else:
+    else: # 否则从 wandb 加载预训练模型
         checkpoint_path = update_checkpoint_path(cfg.checkpointing.load, cfg.wandb)
 
+# 5. 设置StepTracker() ：跨进程共享当前 step 的工具
     # This allows the current step to be shared with the data loader processes.
     step_tracker = StepTracker()
-
+# 6. 设置 PyTorch Lightning 的 Trainer 对象，指定训练参数、日志记录器、回调函数等。
     trainer = Trainer(
         max_epochs=-1,
         accelerator="gpu",
@@ -146,11 +152,12 @@ def train(cfg_dict: DictConfig):
         num_sanity_val_steps=cfg.trainer.num_sanity_val_steps,
         num_nodes=cfg.trainer.num_nodes,
         plugins=LightningEnvironment() if cfg.use_plugins else None,
+        # precision="bf16-mixed",  # （但是Gaussian Rasterizer不支持！！）<--- 我新增了这一行！开启 bfloat16 混合精度，加快训练速度，同时保持数值稳定性。
     )
     torch.manual_seed(cfg_dict.seed + trainer.global_rank)
 
     encoder, encoder_visualizer = get_encoder(cfg.model.encoder)
-
+# 7. 设置模型包装器 ModelWrapper 
     model_wrapper = ModelWrapper(
         cfg.optimizer,
         cfg.test,
@@ -164,13 +171,14 @@ def train(cfg_dict: DictConfig):
             None if eval_cfg is None else eval_cfg.dataset
         ),
     )
+# 8. 设置数据模块 DataModule
     data_module = DataModule(
         cfg.dataset,
         cfg.data_loader,
         step_tracker,
         global_rank=trainer.global_rank,
     )
-
+# 9. 根据训练模式（train/test）执行相应的训练或测试流程
     if cfg.mode == "train":
         print("train:", len(data_module.train_dataloader()))
         print("val:", len(data_module.val_dataloader()))
@@ -228,7 +236,7 @@ def train(cfg_dict: DictConfig):
                     f"Loaded pretrained depth: {cfg.checkpointing.pretrained_depth}"
                 )
             )
-            
+        # **********trainer.fit() 开始训练**********
         trainer.fit(model_wrapper, datamodule=data_module, ckpt_path=checkpoint_path)
     else:
         # load full model
@@ -255,7 +263,7 @@ def train(cfg_dict: DictConfig):
                     f"Loaded pretrained depth: {cfg.checkpointing.pretrained_depth}"
                 )
             )
-            
+        # **********trainer.test() 开始测试**********
         trainer.test(
             model_wrapper,
             datamodule=data_module,

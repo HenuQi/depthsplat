@@ -138,6 +138,7 @@ def train(cfg_dict: DictConfig):
     # This allows the current step to be shared with the data loader processes.
     step_tracker = StepTracker()
 # 6. 设置 PyTorch Lightning 的 Trainer 对象，指定训练参数、日志记录器、回调函数等。
+# 这里只是训练器配置，不会跑模型前向
     trainer = Trainer(
         max_epochs=-1,
         accelerator="gpu",
@@ -156,16 +157,18 @@ def train(cfg_dict: DictConfig):
     )
     torch.manual_seed(cfg_dict.seed + trainer.global_rank)
 
+# 7. 构建encoder和可视化器 并 设置模型包装器 ModelWrapper 
+# 构建encoder和可视化器，并执行其 init
     encoder, encoder_visualizer = get_encoder(cfg.model.encoder)
-# 7. 设置模型包装器 ModelWrapper 
+# 设置模型包装器 ModelWrapper，并进行init。需要传入 encoder、encoder_visualizer、decoder、losses、step_tracker等组件
     model_wrapper = ModelWrapper(
         cfg.optimizer,
         cfg.test,
         cfg.train,
-        encoder,
-        encoder_visualizer,
-        get_decoder(cfg.model.decoder, cfg.dataset),
-        get_losses(cfg.loss),
+        encoder,                # 已经init好了的encoder对象
+        encoder_visualizer,     # 已经init好了的encoder_visualizer对象
+        get_decoder(cfg.model.decoder, cfg.dataset), # 在此处配置并init，得到的decoder对象
+        get_losses(cfg.loss),   # 在此处配置并init得到losses对象
         step_tracker,
         eval_data_cfg=(
             None if eval_cfg is None else eval_cfg.dataset
@@ -186,11 +189,13 @@ def train(cfg_dict: DictConfig):
 
     strict_load = not cfg.checkpointing.no_strict_load
 
-    if cfg.mode == "train":
-        # only load monodepth
+    if cfg.mode == "train": # 执行train训练流程。先为encoder加载指定预训练模型（如果有指定），再调用 trainer.fit() 开始训练
+        
         # 预训练模型加载与继续训练逻辑，根据配置文件中的 checkpointing 字段，决定是否从预训练模型加载权重，以及加载哪些部分的权重
         # （如仅加载单视图深度预测模型的权重，或加载整个模型的权重）。如果指定了预训练模型路径，就从该路径加载模型权重，并根据 strict_load 参数决定是否严格匹配模型结构。
-        if cfg.checkpointing.pretrained_monodepth is not None:
+        
+        # only load monodepth
+        if cfg.checkpointing.pretrained_monodepth is not None: # 加载pretrained_monodepth(depth_anything_v2_vits)的预训练权重
             strict_load = False
             pretrained_model = torch.load(cfg.checkpointing.pretrained_monodepth, map_location='cpu')
             if 'state_dict' in pretrained_model:
@@ -204,7 +209,7 @@ def train(cfg_dict: DictConfig):
             )
 
         # load pretrained mvdepth
-        if cfg.checkpointing.pretrained_mvdepth is not None:
+        if cfg.checkpointing.pretrained_mvdepth is not None: # 加载pretrained_mvdepth(gmflow-scale1-things-e9887eda)的预训练权重
             pretrained_model = torch.load(cfg.checkpointing.pretrained_mvdepth, map_location='cpu')['model']
 
             model_wrapper.encoder.depth_predictor.load_state_dict(pretrained_model, strict=False)
@@ -215,7 +220,7 @@ def train(cfg_dict: DictConfig):
             )
         
         # load full model
-        if cfg.checkpointing.pretrained_model is not None:
+        if cfg.checkpointing.pretrained_model is not None: # 加载整个模型的预训练权重
             pretrained_model = torch.load(cfg.checkpointing.pretrained_model, map_location='cpu')
             if 'state_dict' in pretrained_model:
                 pretrained_model = pretrained_model['state_dict']
@@ -228,7 +233,8 @@ def train(cfg_dict: DictConfig):
             )
 
         # load pretrained depth
-        if cfg.checkpointing.pretrained_depth is not None:
+        if cfg.checkpointing.pretrained_depth is not None: # 加载depth_predictor的预训练权重。
+            # 注意：如果之前已经加载了单视图深度预测模型的权重（pretrained_monodepth），这里再加载预训练深度模型的权重可能会覆盖之前加载的权重，所以需要根据实际情况决定是否加载，以及是否严格匹配模型结构。
             pretrained_model = torch.load(cfg.checkpointing.pretrained_depth, map_location='cpu')['model']
 
             strict_load = True
@@ -238,9 +244,12 @@ def train(cfg_dict: DictConfig):
                     f"Loaded pretrained depth: {cfg.checkpointing.pretrained_depth}"
                 )
             )
+
+        # 另外，如果是继续训练（resume），则会在前面设置 checkpoint_path 为最新的 checkpoint，
+        # 此时 trainer.fit() 会自动从该 checkpoint 恢复训练状态，包括模型权重、优化器状态、当前 epoch 和 step 等信息，无需手动加载模型权重。
         # **********trainer.fit() 开始训练**********
         trainer.fit(model_wrapper, datamodule=data_module, ckpt_path=checkpoint_path)
-    else:
+    else: # 执行test测试流程, 先为encoder加载指定预训练模型（如果有指定），再调用 trainer.test() 开始测试
         # load full model
         if cfg.checkpointing.pretrained_model is not None:
             pretrained_model = torch.load(cfg.checkpointing.pretrained_model, map_location='cpu')

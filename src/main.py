@@ -188,6 +188,8 @@ def train(cfg_dict: DictConfig):
 
     if cfg.mode == "train":
         # only load monodepth
+        # 预训练模型加载与继续训练逻辑，根据配置文件中的 checkpointing 字段，决定是否从预训练模型加载权重，以及加载哪些部分的权重
+        # （如仅加载单视图深度预测模型的权重，或加载整个模型的权重）。如果指定了预训练模型路径，就从该路径加载模型权重，并根据 strict_load 参数决定是否严格匹配模型结构。
         if cfg.checkpointing.pretrained_monodepth is not None:
             strict_load = False
             pretrained_model = torch.load(cfg.checkpointing.pretrained_monodepth, map_location='cpu')

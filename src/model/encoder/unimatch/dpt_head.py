@@ -2,8 +2,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-
-def _make_scratch(in_shape, out_shape, groups=1, expand=False):
+# _make_scratch函数：根据输入和输出的特征维度创建一个包含卷积层的模块，用于将Transformer输出的特征映射到DPTHead需要的特征维度。
+def _make_scratch(in_shape, out_shape, groups=1, expand=False): # 
     scratch = nn.Module()
 
     out_shape1 = out_shape
@@ -452,8 +452,7 @@ class DPTHead(nn.Module):
 # 输出：默认为True   
 # return_feature=True 时输出特征图，shape 是 [ BV, C’, H, W]。
 # return_feature=False 时输出残差深度，shape 是 [ BV, 1, H, W]。
-#  
-# 
+
     def forward(
         self,
         out_features,
@@ -472,6 +471,7 @@ class DPTHead(nn.Module):
         # 1/2, 1/4, 1/8, 1/16
         layer_1, layer_2, layer_3, layer_4 = out
 
+        # 如果使用了分类 token，则需要把它从特征中分离出来，并通过一个线性层进行处理后再加回去
         if self.concat_features:
             if not self.return_feature:
                 assert depth is not None
@@ -542,7 +542,7 @@ class DPTHead(nn.Module):
                         (cnn_features[2], layer_3, mv_features, depth), dim=1
                     )
                 layer_3 = self.concat_projects[2](concat3)  # 1/8
-        else:
+        else: # 不使用分类 token 时直接融合CNN特征和多视角特征
             if self.concat_cnn_features:
                 assert cnn_features is not None
                 assert len(cnn_features) == 3  # 1/2, 1/4, 1/8

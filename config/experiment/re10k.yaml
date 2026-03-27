@@ -2,7 +2,7 @@
 
 defaults:
   - override /dataset: re10k
-  - override /model/encoder: depthsplat
+  - override /model/encoder: vggtdepthsplat # depthsplat改成vggtdepthsplat   
   - override /loss: [mse, lpips]
 
 wandb:

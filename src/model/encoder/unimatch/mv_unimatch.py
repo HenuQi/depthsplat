@@ -79,7 +79,7 @@ class MultiViewUniMatch(nn.Module):
 
         # monodepth
         encoder = vit_type  # can also be 'vitb' or 'vitl'
-        self.pretrained = torch.hub.load( # 加载预训练的 DINOv2 模型
+        self.pretrained = torch.hub.load( # 加载预训练的 DINOv2 模型，注意这里是在微调。
             "facebookresearch/dinov2", "dinov2_{:}14".format(encoder)
         )
 

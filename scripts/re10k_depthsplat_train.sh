@@ -34,10 +34,11 @@ dataset.test_chunk_interval=10 \
 trainer.max_steps=150000 \
 model.encoder.upsample_factor=4 \
 model.encoder.lowest_feature_resolution=4 \
-checkpointing.pretrained_monodepth=pretrained/depth_anything_v2_vits.pth \
-checkpointing.pretrained_mvdepth=pretrained/gmflow-scale1-things-e9887eda.pth \
-output_dir=checkpoints/re10k-256x256-depthsplat-small \
-checkpointing.resume=true
+output_dir=checkpoints/re10k-256x256-depthsplat-small
+
+# 去掉了depth_predictor 和feature_upsampler的部分，就不需要再加载他们的预训练权重了，将下面两行注释掉
+# checkpointing.pretrained_monodepth=pretrained/depth_anything_v2_vits.pth \
+# checkpointing.pretrained_mvdepth=pretrained/gmflow-scale1-things-e9887eda.pth \
 
 # checkpointing.resume=true # 断点恢复：在checkpoints目录下找到最新的checkpoint，继续训练
 

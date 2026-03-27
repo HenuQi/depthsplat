@@ -1,12 +1,12 @@
 defaults:
   - dataset: re10k
   - optional dataset/view_sampler_dataset_specific_config: ${dataset/view_sampler}_${dataset}
-  - model/encoder: depthsplat
+  - model/encoder: vggtdepthsplat  # depthsplat 改成了 depthsplat
   - model/decoder: splatting_cuda
   - loss: [mse]
 
 wandb:
-  project: depthsplat
+  project: vggtdepthsplat # depthsplat 改成vggtdepthsplat 
   entity: placeholder
   name: placeholder
   mode: offline     # online

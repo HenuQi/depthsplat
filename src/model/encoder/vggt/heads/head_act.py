@@ -82,12 +82,12 @@ def activate_head(out, activation="norm_exp", conf_activation="expp1"):
     # fmap: (B*S, H, W, 2) 2个通道分别是：预测深度，以及预测的深度置信度。
 
     # Split into xyz (first C-1 channels) and confidence (last channel)
-    xyz = fmap[:, :, :, :-1]  #  xyz: (B*S, H, W, 1)    # 3个参数是 xyz
-    conf = fmap[:, :, :, :-1] #  conf: (B*S, H, W, 1)      # 1个参数是 置信度
+    xyz = fmap[:, :, :, :-1]  #  xyz: (B*S, H, W, 1)    # 第一个参数是 xyz
+    conf = fmap[:, :, :, -1:] #  conf: (B*S, H, W, 1)      # 第二个参数是 置信度
     # 应该是写错了？？？？本来是
     # conf = fmap[:, :, :, -1]  #  conf: (B*S, H, W)      # 1个参数是 置信度
     # 我改成：
-    # conf = fmap[:, :, :, :-1] #  conf: (B*S, H, W, 1)      # 1个参数是 置信度
+    # conf = fmap[:, :, :, -1:] #  conf: (B*S, H, W, 1)      # 1个参数是 置信度
 
     if activation == "norm_exp":
         d = xyz.norm(dim=-1, keepdim=True).clamp(min=1e-8)
@@ -113,7 +113,7 @@ def activate_head(out, activation="norm_exp", conf_activation="expp1"):
         raise ValueError(f"Unknown activation: {activation}")
 
     if conf_activation == "expp1": # depth_head默认对置信度使用expp1激活函数
-        conf_out = 1 + conf.exp() # conf_out: (B*S, H, W) 预测的置信度图，值域是(1, +inf)，因为 expp1(x) = 1 + exp(x)，当x趋近于负无穷时，expp1(x)趋近于1，当x趋近于正无穷时，expp1(x)趋近于正无穷。
+        conf_out = 1 + conf.exp() # conf_out: (B*S, H, W) 预测的置信度图，值域是(1, +无穷)，因为 expp1(x) = 1 + exp(x)，当x趋近于负无穷时，expp1(x)趋近于1，当x趋近于正无穷时，expp1(x)趋近于正无穷。
     elif conf_activation == "expp0":
         conf_out = conf.exp()
     elif conf_activation == "sigmoid":

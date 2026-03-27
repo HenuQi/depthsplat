@@ -112,21 +112,29 @@ class EncoderVGGTDepthSplat(Encoder[EncoderVGGTDepthSplatCfg]):
 ########################################################################################################## 新增 VGGT模块
     # 初始化 VGGT 模型，并加载预训练权重，
         self.vggt = VGGT(enable_camera=False, enable_point=False, enable_depth=True, enable_track=False)
-        ckpt_url = "https://huggingface.co/facebook/VGGT-1B/resolve/main/model.pt"
-        checkpoint = torch.hub.load_state_dict_from_url(ckpt_url, map_location="cpu") 
-        # map_location="cpu":权重会先安全地落在 CPU 上；之后 Lightning 会在 trainer.fit() 时把整个模型（包含 self.vggt）自动搬到对应 GPU。
-        #   load_state_dict_from_url：从 HuggingFace 下载权重缓存到本地，并用 torch.load() 反序列化
-        #   权重的本质：一个参数字典，即：
-        #   checkpoint = {
-        #       "layer1.weight": tensor(...),
-        #       "layer1.bias": tensor(...),
-        #       ...
-        #   }
-        self.vggt.load_state_dict(checkpoint, strict=False)
-        # load_state_dict()：把权重加载到模型中
-        #   实际上就是state_dict[key]  →  model.parameter[key]，例如：
-        #   "encoder.conv1.weight" → model.encoder.conv1.weight
-        #   注意：key 必须完全匹配，shape 必须一致
+        # # 远程下载，缓存加载权重，
+        # ckpt_url = "https://huggingface.co/facebook/VGGT-1B/resolve/main/model.pt"
+        # checkpoint = torch.hub.load_state_dict_from_url(ckpt_url, map_location="cpu") 
+        # # map_location="cpu":权重会先安全地落在 CPU 上；之后 Lightning 会在 trainer.fit() 时把整个模型（包含 self.vggt）自动搬到对应 GPU。
+        # #   load_state_dict_from_url：从 HuggingFace 下载权重缓存到本地，并用 torch.load() 反序列化
+        # #   权重的本质：一个参数字典，即：
+        # #   checkpoint = {
+        # #       "layer1.weight": tensor(...),
+        # #       "layer1.bias": tensor(...),
+        # #       ...
+        # #   }
+
+        # #-------------------------------------------------------------------------------（先不用，因为在main.py中配置了加载权重）
+        # # # 改成本地加载权重
+        # ckpt_url = "pretrained/vggt_model.pt"
+        # checkpoint = torch.load(ckpt_url, map_location="cpu")
+
+        # self.vggt.load_state_dict(checkpoint, strict=False)
+        # # load_state_dict()：把权重加载到模型中
+        # #   实际上就是state_dict[key]  →  model.parameter[key]，例如：
+        # #   "encoder.conv1.weight" → model.encoder.conv1.weight
+        # #   注意：key 必须完全匹配，shape 必须一致
+        # # ---------------------------------------------------------------------------------
 
     # 冻结aggregator的权重，不参与训练（问题:果 aggregator 里有 dropout/随机性，仅 requires_grad=False 不会关闭 dropout；想让冻结特征稳定，通常还会让冻结部分处于 eval() 模式（至少冻结的子模块）。）
     # 而训练开始时框架会对整个模型调用 .train()，所以如果只在 __init__ 里 self.vggt.aggregator.eval()，可能会被覆盖；
@@ -246,7 +254,7 @@ class EncoderVGGTDepthSplat(Encoder[EncoderVGGTDepthSplatCfg]):
 #         #           "features_mono_intermediate": mono_intermediate_features,    # DINOv2 的中间层特征图列表，包含了指定block的特征图。   每个元素:(B*V, C'=384, H/8, W/8)，其中C'是对应block的特征维度，如 ViT-S:384，ViT-B:768，ViT-L:1024。
 #         #           "features_mono": features_list_mono,                         # DINOv2 的最后一个block的特征图（分辨率为1/8）。        每个元素:(B*V, C'=384, H/8, W/8)，其中C'是对应block的特征维度，如 ViT-S:384，ViT-B:768，ViT-L:1024。
 #         #           "depth_preds": depth_preds,                                  # 深度预测的 深度图depth列表（已经从逆深度转换为深度）。  每个元素:(B, V, H, W)。
-#         #           "match_probs": match_probs,                                  # 匹配概率图列表。                                      每个元素:(BV, D, H/8, W/8)，
+#         #           "match_probs": match_probs,                                  # 匹配概率图列表。                                      每个元素:(BV, D, H/8, W/8)，单个元素范围0-1，值越大表示该像素更倾向于该候选深度。
 #         #       }
 #         results_dict = self.depth_predictor(
 #             context["image"],                       # (B,V,3,H,W)
@@ -315,7 +323,7 @@ class EncoderVGGTDepthSplat(Encoder[EncoderVGGTDepthSplatCfg]):
 #     # 求深度可信度match_prob:(BV, 1, H, W)
 #         # match prob from softmax
 #         # [BV, D, H, W] in feature resolution
-#         match_prob = results_dict['match_probs'][-1] # match_prob:[BV, D, H, W] 最后一层（最高分辨率）的概率,
+#         match_prob = results_dict['match_probs'][-1] # match_prob:[BV, D, H, W] 最后一层（最高分辨率）的概率, 单个元素范围0-1，值越大表示该像素更倾向于该候选深度。
 #         match_prob = torch.max(match_prob, dim=1, keepdim=True)[ # 沿 D 维度取最大值。如果最大值很大接近 1，说明匹配的准确。# max probability≈ 匹配置信度
 #             0]  # [BV, 1, H, W]
 #         match_prob = F.interpolate( # nearest插值，恢复到原分辨率
@@ -350,20 +358,31 @@ class EncoderVGGTDepthSplat(Encoder[EncoderVGGTDepthSplatCfg]):
         #   depth_conf: (B, S, H, W, 1)  深度置信度
         #   feature_map: (B, S, C=128, H, W)  特征图
         depth_map, depth_conf, feature_map = run_DepthHead(self.vggt.depth_head, aggregated_tokens_list, vggt_images, patch_start_idx)
+        # 注意1，这些张量的分辨率对齐的是VGGT的输入分辨率（518*518），而不是原始图像的分辨率（256*256），所以后续如果要和原始图像特征拼接，可能需要进行插值上采样或者其他对齐处理。
+        # 注意2，
+        #   depth_conf中的数值范围是(1,正无穷)，表示模型对该像素预测结果的自信程度，
+        #   而他替代的原版 match_prob ，单个元素范围0-1，取的是该候选深度可能性的最大值，用于表示匹配置信度，即：模型对该像素预测结果的自信程度。 
+        #   
+        #   所以在后续使用 depth_conf 替代 match_prob 的地方，可能需要进行数值范围的调整，
+        #   例如通过某种函数（如 sigmoid）把 depth_conf 转换到 0-1 范围内，来更好地表示深度预测的置信度。
+        #   或者直接用 depth_conf 的数值来表示深度预测的置信度，但要注意数值范围和含义的差异。
 
-        # 将深度图、深度置信度和特征图从 518*518分辨率，变成256*256分辨率。
+        # 注意2解决：让 depth_conf 替代 match_prob，保证与 match_prob 意义一致，即：数值在0-1之间，值越大置信度越高，模型对该像素预测结果的自信程度越高。
+        # depth_conf = 1 - 1 / depth_conf
+
+        # 注意2解决：把depth_conf预测的激活函数改成sigmoid，直接预测出来元素范围0~1的depth_conf，只不过后续需要微调
+        # 注意1解决：将深度图、深度置信度和特征图从 518*518分辨率，变成256*256分辨率。
         depth_map, depth_conf = preprocess_depth_for_depthsplat(depth_map, depth_conf) # 深度图和深度置信度的预处理，适配DepthSplat的输入要求
         feature_map = preprocess_features_for_depthsplat(self.feature_downsampler, feature_map) # 特征图的预处理，适配DepthSplat的输入要求
 
-        # 注意，这些张量的分辨率对齐的是VGGT的输入分辨率（518*518），而不是原始图像的分辨率（256*256），所以后续如果要和原始图像特征拼接，
-        # 可能需要进行插值上采样或者其他对齐处理。
+
 
         # 处理这些张量
         # depth_map = rearrange(depth_map, "b v h w c -> b v h w") # rearrange不允许平白无故丢掉一个维度，所以 c 要明确写成1，如下：
         # depth_map = rearrange(depth_map, "b v h w 1 -> b v h w") # depth_map:(B, V, H, W)
         # 或者直接用 squeeze 去掉最后一维 
         depth_map = depth_map.squeeze(-1)
-        
+
         depth_conf = rearrange(depth_conf, "b v h w c -> (b v) c h w ") # depth_conf:(BV, 1, H, W)
         feature_map = rearrange(feature_map, "b v c h w -> (b v) c h w") # feature_map:(BV, C=128, H, W)，
 
@@ -444,7 +463,7 @@ class EncoderVGGTDepthSplat(Encoder[EncoderVGGTDepthSplatCfg]):
         densities = rearrange( # densities:(B, V, H*W, 1, 1)，深度可信度match_prob展平后得到的密度值，准备后续的高斯参数回归
             depth_conf, "(b v) c h w -> b v (c h w) () ()", b=b, v=v)
         # 原版如下：
-        # densities = rearrange( # densities:(B, V, H*W, 1, 1)，深度可信度match_prob展平后得到的密度值，准备后续的高斯参数回归
+        # densities = rearrange( # densities:(B, V, H*W, 1, 1)，深度可信度match_prob展平后得到的密度值，计算了但未被实际使用”的中间变量
         #     match_prob, "(b v) c h w -> b v (c h w) () ()", b=b, v=v)
 
         # [B, V, H*W, 84]  # 注意，在sh_degree=4的配置下才等于84。sh_degree=2时等于37。

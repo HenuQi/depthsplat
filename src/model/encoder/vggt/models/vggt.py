@@ -35,7 +35,13 @@ class VGGT(nn.Module, PyTorchModelHubMixin):
 
         self.camera_head = CameraHead(dim_in=2 * embed_dim) if enable_camera else None # 说明送进去的 token 维度是dim_in=2 * embed_dim,
         self.point_head = DPTHead(dim_in=2 * embed_dim, output_dim=4, activation="inv_log", conf_activation="expp1") if enable_point else None # 输出维度是4，预测 (x, y, z, w)
-        self.depth_head = DPTHead(dim_in=2 * embed_dim, output_dim=2, activation="exp", conf_activation="expp1") if enable_depth else None
+        
+        self.depth_head = DPTHead(dim_in=2 * embed_dim, output_dim=2, activation="exp", conf_activation="sigmoid") if enable_depth else None
+        # 为了把depth_conf预测的激活函数改成sigmoid，直接预测出来元素范围0~1的depth_conf，
+        # 不过加载的vggt预训练权重是用expp1训练的，需要微调。
+        # 原版如下:
+        # self.depth_head = DPTHead(dim_in=2 * embed_dim, output_dim=2, activation="exp", conf_activation="expp1") if enable_depth else None
+
         self.track_head = TrackHead(dim_in=2 * embed_dim, patch_size=patch_size) if enable_track else None
 
 
@@ -93,11 +99,19 @@ class VGGT(nn.Module, PyTorchModelHubMixin):
                 
             # 计算深度图
             if self.depth_head is not None:
-                depth, depth_conf = self.depth_head(
+                # 我没用到vggt的forward(),这一步也要更新 深度图吗？
+                # 注意，这里的 depth_head 不仅输出深度图和深度置信度，还输出了一个特征图（维度是 (B, S, C, H, W)），这个特征图是从 depth_head 内部提取的，用于后续的高斯参数回归。
+                #原版：
+                # depth, depth_conf = self.depth_head(
+                #     aggregated_tokens_list, images=images, patch_start_idx=patch_start_idx
+                # )
+                depth, depth_conf , feature_map= self.depth_head(
                     aggregated_tokens_list, images=images, patch_start_idx=patch_start_idx
                 )
+
                 predictions["depth"] = depth
                 predictions["depth_conf"] = depth_conf
+                ######新增 predictions["feature_map"] = feature_map
 
             # 计算点图
             if self.point_head is not None:

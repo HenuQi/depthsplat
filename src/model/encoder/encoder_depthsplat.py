@@ -193,7 +193,7 @@ class EncoderDepthSplat(Encoder[EncoderDepthSplatCfg]):
         #           "features_mono_intermediate": mono_intermediate_features,    # DINOv2 的中间层特征图列表，包含了指定block的特征图。   每个元素:(B*V, C'=384, H/8, W/8)，其中C'是对应block的特征维度，如 ViT-S:384，ViT-B:768，ViT-L:1024。
         #           "features_mono": features_list_mono,                         # DINOv2 的最后一个block的特征图（分辨率为1/8）。        每个元素:(B*V, C'=384, H/8, W/8)，其中C'是对应block的特征维度，如 ViT-S:384，ViT-B:768，ViT-L:1024。
         #           "depth_preds": depth_preds,                                  # 深度预测的 深度图depth列表（已经从逆深度转换为深度）。  每个元素:(B, V, H, W)。
-        #           "match_probs": match_probs,                                  # 匹配概率图列表。                                      每个元素:(BV, D, H/8, W/8)，
+        #           "match_probs": match_probs,                                  # 匹配概率图列表。                                      每个元素:(BV, D, H/8, W/8)，单个元素范围0-1，值越大表示该像素更倾向于该候选深度。
         #       }
         results_dict = self.depth_predictor(
             context["image"],                       # (B,V,3,H,W)
@@ -258,8 +258,8 @@ class EncoderDepthSplat(Encoder[EncoderDepthSplatCfg]):
     # 求深度可信度match_prob:(BV, 1, H, W)
         # match prob from softmax
         # [BV, D, H, W] in feature resolution
-        match_prob = results_dict['match_probs'][-1] # match_prob:[BV, D, H, W] 最后一层（最高分辨率）的概率,
-        match_prob = torch.max(match_prob, dim=1, keepdim=True)[ # 沿 D 维度取最大值。如果最大值很大接近 1，说明匹配的准确。# max probability≈ 匹配置信度
+        match_prob = results_dict['match_probs'][-1] # match_prob:[BV, D, H, W] 最后一层（最高分辨率）的概率, 单个元素范围0-1，值越大表示该像素更倾向于该候选深度。
+        match_prob = torch.max(match_prob, dim=1, keepdim=True)[ # 沿 D 维度取最大值。如果最大值很大接近 1，说明模型信任这个深度，匹配的准确。# max probability≈ 匹配置信度/深度置信度
             0]  # [BV, 1, H, W]
         match_prob = F.interpolate( # nearest插值，恢复到原分辨率
             match_prob, size=depth.shape[-2:], mode='nearest')
@@ -307,7 +307,7 @@ class EncoderDepthSplat(Encoder[EncoderDepthSplatCfg]):
         depths = rearrange(depth, "b v h w -> b v (h w) () ()") # depths:(B, V, H*W, 1, 1)，把深度图展平，这样每个像素就变成一个 ray sample
 
         # [B, V, H*W, 1, 1]
-        densities = rearrange( # densities:(B, V, H*W, 1, 1)，深度可信度match_prob展平后得到的密度值，准备后续的高斯参数回归
+        densities = rearrange( # densities:(B, V, H*W, 1, 1)，深度可信度match_prob展平后得到的密度值，计算了但未被实际使用”的中间变量
             match_prob, "(b v) c h w -> b v (c h w) () ()", b=b, v=v)
         # [B, V, H*W, 84]  # 注意，在sh_degree=4的配置下才等于84。sh_degree=2时等于37。
         raw_gaussians = rearrange( # raw_gaussians:(B, V, H*W, C_g=37)，高斯参数展平后得到的原始高斯参数，准备后续的高斯参数回归

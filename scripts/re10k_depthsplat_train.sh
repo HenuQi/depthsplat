@@ -28,13 +28,18 @@ output_dir=checkpoints/re10k-256x256-depthsplat-small
 
 # 我的 or 
 # 4x A6000 (48GB) for 150K steps
+export WANDB_API_KEY=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 
+
 NCCL_DEBUG=INFO TORCH_DISTRIBUTED_DETAIL=DEBUG python -m src.main +experiment=re10k \
-data_loader.train.batch_size=8 \
+data_loader.train.batch_size=4 \
 dataset.test_chunk_interval=10 \
-trainer.max_steps=150000 \
+trainer.max_steps=300000 \
 model.encoder.upsample_factor=4 \
 model.encoder.lowest_feature_resolution=4 \
 output_dir=checkpoints/re10k-256x256-depthsplat-small
+
+# 新增了 VGGT 模块，就要在训练命令中需要指定 pretrained_vggt 的路径来加载 VGGT 的预训练权重。
+# checkpointing.pretrained_vggt=pretrained/vggt_model.pt \
 
 # 去掉了depth_predictor 和feature_upsampler的部分，就不需要再加载他们的预训练权重了，将下面两行注释掉
 # checkpointing.pretrained_monodepth=pretrained/depth_anything_v2_vits.pth \

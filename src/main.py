@@ -187,13 +187,28 @@ def train(cfg_dict: DictConfig):
         print("val:", len(data_module.val_dataloader()))
         print("test:", len(data_module.test_dataloader()))
 
-    strict_load = not cfg.checkpointing.no_strict_load
+    strict_load = not cfg.checkpointing.no_strict_load  #strict_load =True, 意思是严格加载权重
 
     if cfg.mode == "train": # 执行train训练流程。先为encoder加载指定预训练模型（如果有指定），再调用 trainer.fit() 开始训练
         
         # 预训练模型加载与继续训练逻辑，根据配置文件中的 checkpointing 字段，决定是否从预训练模型加载权重，以及加载哪些部分的权重
         # （如仅加载单视图深度预测模型的权重，或加载整个模型的权重）。如果指定了预训练模型路径，就从该路径加载模型权重，并根据 strict_load 参数决定是否严格匹配模型结构。
         
+#################################################################################################新增
+        # 加载VGGT权重
+        if cfg.checkpointing.pretrained_vggt is not None: # 加载预训练的VGGT权重
+            pretrained_model = torch.load(cfg.checkpointing.pretrained_vggt, map_location='cpu')
+            if 'state_dict' in pretrained_model:
+                pretrained_model = pretrained_model['state_dict']
+
+            model_wrapper.encoder.vggt.load_state_dict(pretrained_model, strict=strict_load)
+            print(
+                cyan(
+                    f"Loaded pretrained VGGT: {cfg.checkpointing.pretrained_vggt}"
+                )
+            )
+####################################################################################################
+
         # only load monodepth
         if cfg.checkpointing.pretrained_monodepth is not None: # 加载pretrained_monodepth(depth_anything_v2_vits)的预训练权重
             strict_load = False

@@ -22,6 +22,9 @@ class CheckpointingCfg:
     every_n_train_steps: int
     save_top_k: int
     pretrained_model: Optional[str]
+    ############################新增
+    pretrained_vggt: Optional[str]
+    ############################
     pretrained_monodepth: Optional[str]
     pretrained_mvdepth: Optional[str]
     pretrained_depth: Optional[str]

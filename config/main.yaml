@@ -7,9 +7,9 @@ defaults:
 
 wandb:
   project: vggtdepthsplat # depthsplat 改成vggtdepthsplat 
-  entity: placeholder
-  name: placeholder
-  mode: offline     # online
+  entity: 746200425-beijing-forestry-university   # 原来是placeholder，# 改成你的 WandB 用户名或团队名
+  name: vggtdepthsplatfirst     # placeholder ，# 运行名称，可以自定义## 可选，run 的名字，不建议和 entity 一样
+  mode: online     #  可以设置成 offline ，就只在本地了
   id: null
 
 mode: train
@@ -45,6 +45,9 @@ checkpointing:
   every_n_train_steps: 5000
   save_top_k: 5
   pretrained_model: null
+  ############################新增
+  pretrained_vggt: null
+  ############################
   pretrained_monodepth: null
   pretrained_mvdepth: null
   pretrained_depth: null

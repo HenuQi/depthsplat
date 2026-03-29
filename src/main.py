@@ -201,7 +201,9 @@ def train(cfg_dict: DictConfig):
             if 'state_dict' in pretrained_model:
                 pretrained_model = pretrained_model['state_dict']
 
-            model_wrapper.encoder.vggt.load_state_dict(pretrained_model, strict=strict_load)
+            model_wrapper.encoder.vggt.load_state_dict(pretrained_model, strict=False)  
+            # strict=False 允许加载的预训练权重与当前模型结构不完全匹配（例如，预训练模型可能缺少某些层，或者当前模型新增了某些层）。
+            # 因为只需要 aggregator和depthhead,不需要其他头，因此不能严格对齐权重
             print(
                 cyan(
                     f"Loaded pretrained VGGT: {cfg.checkpointing.pretrained_vggt}"

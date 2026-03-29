@@ -342,7 +342,7 @@ class EncoderVGGTDepthSplat(Encoder[EncoderVGGTDepthSplatCfg]):
 
 ###################################################################################################### 新增
 # 代替 2.1 和 2.2 功能：
-        # 处理图像，适配VGGT的输入要求（固定尺寸518*518）
+        # 处理图像256*256->518*518，适配VGGT的输入要求（固定尺寸518*518）
         vggt_images = preprocess_images_for_vggt(context["image"], resolution=518) # vggt_images:(BV, 3, 518, 518)
 
     # 1. 使用 VGGT 的 aggregator 模型（冻结） 提取特征 tokens，用于深度图预测。

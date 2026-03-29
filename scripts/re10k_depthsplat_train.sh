@@ -36,7 +36,8 @@ dataset.test_chunk_interval=10 \
 trainer.max_steps=300000 \
 model.encoder.upsample_factor=4 \
 model.encoder.lowest_feature_resolution=4 \
-output_dir=checkpoints/re10k-256x256-depthsplat-small
+output_dir=checkpoints/re10k-256x256-depthsplat-small \
+checkpointing.pretrained_vggt=pretrained/vggt_model.pt
 
 # 新增了 VGGT 模块，就要在训练命令中需要指定 pretrained_vggt 的路径来加载 VGGT 的预训练权重。
 # checkpointing.pretrained_vggt=pretrained/vggt_model.pt \

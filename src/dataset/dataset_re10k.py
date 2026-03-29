@@ -22,10 +22,11 @@ from .types import Stage
 from .view_sampler import ViewSampler
 
 
+# DatasetRE10k 的配置类, 具体配置在config/dataset/re10k.yaml中指定
 @dataclass
 class DatasetRE10kCfg(DatasetCfgCommon):
     name: Literal["re10k"]
-    roots: list[Path]
+    roots: list[Path]               # 根目录
     baseline_epsilon: float
     max_fov: float
     make_baseline_1: bool
@@ -41,7 +42,7 @@ class DatasetRE10kCfg(DatasetCfgCommon):
     highres: bool = False
     use_index_to_load_chunk: Optional[bool] = False
 
-
+# DatasetRE10k 类。继承自 PyTorch 的 IterableDataset，表示一个可迭代的数据集，适用于大规模数据或在线生成数据的场景。
 class DatasetRE10k(IterableDataset):
     cfg: DatasetRE10kCfg
     stage: Stage
@@ -93,6 +94,9 @@ class DatasetRE10k(IterableDataset):
         indices = torch.randperm(len(lst))
         return [lst[x] for x in indices]
 
+    # DatasetRE10k 不是按 index 取样，而是流式迭代 chunk
+    # 这个函数是 Dataset 类的 __iter__ 方法，也就是 核心迭代器。
+    # 它定义了 如何从原始 scene / chunk 生成训练样本（Example）
     def __iter__(self):
         # Chunks must be shuffled here (not inside __init__) for validation to show
         # random chunks.
